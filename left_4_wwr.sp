@@ -64,6 +64,11 @@ public void OnPluginStart()
     ReadVariables();
 }
 
+stock bool IsValidClient(int client)
+{
+    return client > 0 && client <= MaxClients && IsClientInGame(client);
+}
+
 public Action CommandReload(int client, int args)
 {
     if (client != 0 && !IsValidClient(client))
