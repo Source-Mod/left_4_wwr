@@ -7,14 +7,15 @@ public Plugin myinfo =
     name        = "Left 4 World Wide Rank",
     author      = "BoboDev",
     description = "Changes server rank and number of players served.",
-    version     = "1.0",
+    version     = "1.1",
     url         = "https://github.com/LeandroTheDev/left_4_wwr"
 
 };
 
-char gv_DatabaseConfig[PLATFORM_MAX_PATH];
-char gv_TableName[PLATFORM_MAX_PATH];
-bool gv_ShouldDebug = false;
+char     gv_DatabaseConfig[PLATFORM_MAX_PATH];
+char     gv_TableName[PLATFORM_MAX_PATH];
+bool     gv_ShouldDebug = false;
+Database gv_Database    = null;
 
 int  gv_ServerRank    = 1;
 int  gv_ServedPlayers = 0;
@@ -62,6 +63,7 @@ public void OnPluginStart()
     RegConsoleCmd("worldrankreload", CommandReload, "Reload Cvars");
 
     ReadVariables();
+    ConnectDatabase();
 }
 
 stock bool IsValidClient(int client)
@@ -93,53 +95,54 @@ public OnClientConnected()
     RefreshServedPlayers();
 }
 
+stock void ConnectDatabase()
+{
+    Database.Connect(ConnectDatabase_Callback, gv_DatabaseConfig);
+}
+
+public void ConnectDatabase_Callback(Database database, const char[] error, any data)
+{
+    if (database == null)
+    {
+        PrintToServer("[Left 4 World Wide Rank] ERROR: Cannot connect to the database: %s", error);
+        return;
+    }
+
+    gv_Database = database;
+    PrintToServer("[Left 4 World Wide Rank] Database connected.");
+}
+
 stock void RefreshServedPlayers()
 {
-    Database database = CreateDatabaseConnection();
-    if (database == null) return;
+    if (gv_Database == null)
+    {
+        PrintToServer("[Left 4 World Wide Rank] Database not connected, skipping refresh.");
+        return;
+    }
 
     char query[256];
     Format(query, sizeof(query), "SELECT COUNT(*) FROM `%s`", gv_TableName);
 
-    char        statementError[456];
-    DBStatement statement = SQL_PrepareQuery(database, query, statementError, sizeof(statementError));
-
     if (gv_ShouldDebug)
         PrintToServer("[Left 4 World Wide Rank] Query: SELECT COUNT(*) FROM `%s`", gv_TableName);
 
-    if (!SQL_Execute(statement))
-    {
-        char databaseError[456];
-        SQL_GetError(database, databaseError, sizeof(databaseError));
-        PrintToServer("[Left 4 World Wide Rank] Database error: %s", databaseError);
-        PrintToServer("[Left 4 World Wide Rank] Statement error: %s", statementError);
-    }
-
-    if (SQL_HasResultSet(statement))
-    {
-        while (SQL_FetchRow(statement))
-        {
-            gv_ServedPlayers = SQL_FetchInt(statement, 0);
-            if (gv_ShouldDebug)
-                PrintToServer("[Left 4 World Wide Rank] Served Players refreshed: %d", gv_ServedPlayers);
-        }
-    }
-
-    statement.Close();
-    database.Close();
+    SQL_TQuery(gv_Database, RefreshServedPlayers_Callback, query);
 }
 
-stock Database CreateDatabaseConnection()
+public void RefreshServedPlayers_Callback(Database database, DBResultSet results, const char[] error, any data)
 {
-    char     error[256];
-    Database database = SQL_Connect(gv_DatabaseConfig, true, error, sizeof(error));
-
-    if (database == null)
+    if (results == null || error[0] != '\0')
     {
-        PrintToServer("[Left 4 World Wide Rank] ERROR: Cannot connect to the database: %s", error);
-        return null;
+        PrintToServer("[Left 4 World Wide Rank] Database error on refresh: %s", error);
+        return;
     }
-    else {
-        return database;
+
+    if (results.FetchRow())
+    {
+        gv_ServedPlayers = results.FetchInt(0);
+        GameRules_SetProp("m_iServerPlayerCount", gv_ServedPlayers);
+
+        if (gv_ShouldDebug)
+            PrintToServer("[Left 4 World Wide Rank] Served Players refreshed: %d", gv_ServedPlayers);
     }
 }

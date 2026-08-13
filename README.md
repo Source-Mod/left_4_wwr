@@ -16,7 +16,6 @@ CREATE mydatabase
 USE mydatabase
 CREATE TABLE left4dead2 (
     uniqueid VARCHAR(255) NOT NULL PRIMARY KEY,
-    value DECIMAL(50, 0) NOT NULL DEFAULT 0
 );
 ```
 
